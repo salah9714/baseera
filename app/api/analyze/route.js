@@ -4,7 +4,7 @@ import { analyzeTechnical } from "../../../lib/engines/technicalEngine.js";
 
 export const dynamic = "force-dynamic";
 
-var API_KEY = process.env.MARKETSTACK_KEY || "0bac9135fc2c32aa38536052154cfad8";
+var API_KEY = process.env.MARKETSTACK_KEY || "0cdaa7035167a57e21baa44b2285bcf2";
 
 // ── Fetch current quote + historical data in parallel ──
 async function fetchQuoteAndHistory(code) {
