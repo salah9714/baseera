@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "app/api/stocks/route.js": { "maxDuration": 60 },
+    "app/api/market/route.js": { "maxDuration": 60 },
+    "app/api/backtest/route.js": { "maxDuration": 60 },
+    "app/api/analyze/route.js": { "maxDuration": 60 }
+  }
+}
