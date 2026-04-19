@@ -162,7 +162,7 @@ export default function App() {
     console.log("[Baseera] Fetching /api/stocks and /api/market...");
 
     Promise.allSettled([
-      fetch("/api/stocks").then(function(r) {
+      fetch("/api/argaam").then(function(r) {
         return r.json().then(function(j) { return { status: r.status, body: j }; });
       }),
       fetch("/api/market").then(function(r) {
@@ -204,7 +204,7 @@ export default function App() {
   var fetchDetail = useCallback(function(code) {
     setSel(code); setPg("stock"); setMenuOpen(false); setDetail(null); setAnalysis(null);
     console.log("[Baseera] Fetching detail for " + code);
-    fetch("/api/stocks?code=" + code + "&type=full").then(function(r) {
+    fetch("/api/argaam?code=" + code ).then(function(r) {
       return r.json().then(function(j) { return { status: r.status, body: j }; });
     }).then(function(res) {
       if (res.status === 200 && res.body.price) {

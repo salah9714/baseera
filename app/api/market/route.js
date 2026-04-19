@@ -1,39 +1,48 @@
-export const dynamic = "force-dynamic";
-var API_KEY = process.env.MARKETSTACK_KEY || "0bac9135fc2c32aa38536052154cfad8";
+import { fetchArgaamData } from "../../../lib/engines/argaamScraper.js";
 
-// Determine Saudi market status based on Riyadh time
+export const dynamic = "force-dynamic";
+
+// ══════════════════════════════════════════════════════════════
+// Market API v2 - Argaam-powered
+// TASI + NomuC are 100% accurate from Argaam
+// MT30 still missing (not exposed in Argaam quotes page)
+// ══════════════════════════════════════════════════════════════
+
+// Cached to avoid re-fetching when stocks API already fetched it
+var cache = { data: null, timestamp: 0 };
+var CACHE_MS = 5 * 60 * 1000;
+
+async function getCachedData() {
+  var now = Date.now();
+  if (cache.data && (now - cache.timestamp) < CACHE_MS) return cache.data;
+  var result = await fetchArgaamData();
+  if (result.ok) {
+    cache.data = result;
+    cache.timestamp = now;
+  }
+  return result;
+}
+
 function getMarketStatus() {
   try {
     var now = new Date();
-    // Riyadh = UTC+3, no DST
+    // Riyadh = UTC+3 (no DST)
     var riyadhHours = (now.getUTCHours() + 3) % 24;
     var riyadhMinutes = now.getUTCMinutes();
-    var riyadhDay = now.getUTCDay(); // 0=Sun, 5=Fri, 6=Sat
-    // Adjust day for timezone shift at midnight
+    var riyadhDay = now.getUTCDay();
     if (now.getUTCHours() + 3 >= 24) riyadhDay = (riyadhDay + 1) % 7;
 
-    // Weekend: Friday (5) and Saturday (6)
+    // Weekend: Friday (5) and Saturday (6) in Saudi Arabia
     if (riyadhDay === 5 || riyadhDay === 6) {
       return { state: "closed", label: "مغلق (نهاية الأسبوع)", color: "red", emoji: "🔴" };
     }
 
     var minutes = riyadhHours * 60 + riyadhMinutes;
-    var preOpenStart = 9 * 60 + 30;     // 09:30
-    var marketOpen = 10 * 60;            // 10:00
-    var marketClose = 15 * 60;           // 15:00
-    var closingAuction = 15 * 60 + 10;   // 15:10
-
-    if (minutes < preOpenStart) {
-      return { state: "pre_market", label: "قبل الافتتاح", color: "gold", emoji: "🟡" };
-    } else if (minutes < marketOpen) {
-      return { state: "pre_open", label: "جلسة افتتاح", color: "gold", emoji: "🟡" };
-    } else if (minutes < marketClose) {
-      return { state: "open", label: "السوق مفتوح", color: "green", emoji: "🟢" };
-    } else if (minutes < closingAuction) {
-      return { state: "closing", label: "جلسة الإغلاق", color: "gold", emoji: "🟡" };
-    } else {
-      return { state: "closed", label: "مغلق (انتهى التداول)", color: "red", emoji: "🔴" };
-    }
+    if (minutes < 570) return { state: "pre_market", label: "قبل الافتتاح", color: "gold", emoji: "🟡" };
+    if (minutes < 600) return { state: "pre_open", label: "جلسة افتتاح", color: "gold", emoji: "🟡" };
+    if (minutes < 900) return { state: "open", label: "السوق مفتوح", color: "green", emoji: "🟢" };
+    if (minutes < 910) return { state: "closing", label: "جلسة الإغلاق", color: "gold", emoji: "🟡" };
+    return { state: "closed", label: "مغلق (انتهى التداول)", color: "red", emoji: "🔴" };
   } catch (e) {
     return { state: "unknown", label: "غير معروف", color: "grey", emoji: "⚪" };
   }
@@ -44,57 +53,21 @@ function daysSince(dateStr) {
   try { return Math.floor((new Date() - new Date(dateStr)) / 86400000); } catch (e) { return null; }
 }
 
-async function fetchIndex(symbol) {
-  var urls = [
-    "https://api.marketstack.com/v1/eod/latest?access_key=" + API_KEY + "&symbols=" + symbol + "&limit=1",
-    "http://api.marketstack.com/v1/eod/latest?access_key=" + API_KEY + "&symbols=" + symbol + "&limit=1",
-  ];
-  for (var u = 0; u < urls.length; u++) {
-    try {
-      var res = await fetch(urls[u], { signal: AbortSignal.timeout(8000), cache: "no-store" });
-      if (res.status === 401 && u === 0) continue;
-      if (!res.ok) continue;
-      var json = await res.json();
-      if (!json.data || !json.data[0]) continue;
-      return json.data[0];
-    } catch (e) {}
-  }
-  return null;
-}
-
 export async function GET() {
   try {
-    // Fetch all three major indices in parallel
-    var results = await Promise.all([
-      fetchIndex("TASI.INDX"),
-      fetchIndex("MT30.INDX"),
-      fetchIndex("NOMUC.INDX"),
-    ]);
+    var result = await getCachedData();
 
-    var tasiRaw = results[0];
-    var mt30Raw = results[1];
-    var nomucRaw = results[2];
-
-    function toIndex(raw) {
-      if (!raw) return { value: 0, change: 0, changePct: 0, date: null };
-      var price = raw.close || 0;
-      var open = raw.open || price;
-      return {
-        value: Math.round(price * 100) / 100,
-        open: Math.round(open * 100) / 100,
-        high: raw.high || 0,
-        low: raw.low || 0,
-        change: Math.round((price - open) * 100) / 100,
-        changePct: open > 0 ? Math.round(((price - open) / open) * 10000) / 100 : 0,
-        date: (raw.date || "").split("T")[0],
-      };
+    if (!result || !result.ok) {
+      return Response.json({
+        error: "تعذر تحميل بيانات السوق من Argaam",
+        detail: result ? result.error : "unknown",
+      }, { status: 502 });
     }
 
-    var tasi = toIndex(tasiRaw);
-    var mt30 = toIndex(mt30Raw);
-    var nomuc = toIndex(nomucRaw);
+    var tasi = result.indices.tasi || { value: 0, change: 0, changePct: 0 };
+    var nomuc = result.indices.nomuc || { value: 0, change: 0, changePct: 0 };
 
-    // Compute market regime score based on TASI trend
+    // Compute market regime based on TASI
     var score = 50;
     if (tasi.changePct > 1) score += 20;
     else if (tasi.changePct > 0) score += 10;
@@ -109,23 +82,33 @@ export async function GET() {
     else { state = "هبوط"; desc = "حماية رأس المال"; }
 
     var marketStatus = getMarketStatus();
-    var ageDays = daysSince(tasi.date);
+    var ageDays = daysSince(result.data_date);
+
+    // Compute top gainers and losers for dashboard stats
+    var gainers = result.stocks.filter(function(s) { return s.changePct > 0; }).length;
+    var losers = result.stocks.filter(function(s) { return s.changePct < 0; }).length;
 
     return Response.json({
       market_status: marketStatus,
       indices: {
-        tasi: tasi,
-        mt30: mt30,
-        nomuc: nomuc,
+        tasi: { value: tasi.value, change: tasi.change, changePct: tasi.changePct, date: result.data_date },
+        mt30: { value: 0, change: 0, changePct: 0, date: result.data_date },  // not available from Argaam quotes page
+        nomuc: { value: nomuc.value, change: nomuc.change, changePct: nomuc.changePct, date: result.data_date },
       },
-      // Keep backward-compatible fields for current UI
-      tasi: { value: tasi.value, change: tasi.changePct, high: tasi.high, low: tasi.low, sma200: 0, sma50: 0 },
+      // Backward-compatible fields
+      tasi: { value: tasi.value, change: tasi.changePct, high: tasi.value, low: tasi.value, sma200: 0, sma50: 0 },
       oil: { price: 0, change: 0 },
       regime: { state: state, score: score, description: desc },
-      data_date: tasi.date,
+      breadth: {
+        total: result.stocks.length,
+        gainers: gainers,
+        losers: losers,
+        unchanged: result.stocks.length - gainers - losers,
+      },
+      data_date: result.data_date,
       data_age_days: ageDays,
       timestamp: new Date().toISOString(),
-      source: "marketstack",
+      source: "argaam",
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
