@@ -348,10 +348,21 @@ export default function App() {
           </div>
         </div>}
 
-        {/* Disclaimer */}
-        <div style={{ background: or + "10", borderBottom: "1px solid " + or + "30", padding: "5px 12px", fontSize: isMobile ? 9 : 11, color: or, textAlign: "center" }}>
-          ⚠️ بيانات EOD (آخر إغلاق) · تحليل آلي وليس توصية استثمارية
-        </div>
+        {/* Market Status + Data Freshness Banner */}
+        {market && market.market_status && <div style={{ background: market.market_status.state === "open" ? gn + "15" : market.market_status.state === "closed" ? rd + "10" : or + "10", borderBottom: "1px solid " + (market.market_status.state === "open" ? gn : market.market_status.state === "closed" ? rd : or) + "40", padding: "6px 12px", fontSize: isMobile ? 10 : 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontWeight: 700, color: market.market_status.state === "open" ? gn : market.market_status.state === "closed" ? rd : or }}>
+              {market.market_status.emoji} {market.market_status.label}
+            </span>
+            {market.indices && market.indices.tasi && market.indices.tasi.date && <span style={{ fontSize: isMobile ? 9 : 10, color: dm }}>
+              • آخر إغلاق: <strong style={{ color: market.data_age_days > 3 ? rd : "#cbd5e1" }}>{market.indices.tasi.date}</strong>
+              {market.data_age_days > 3 && <span style={{ color: rd, marginRight: 6 }}> (قديمة {market.data_age_days} يوم!)</span>}
+            </span>}
+          </div>
+          <div style={{ fontSize: isMobile ? 9 : 10, color: dm }}>
+            تحليل آلي · ليس توصية استثمارية
+          </div>
+        </div>}
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? 10 : 14 }}>
@@ -389,13 +400,40 @@ export default function App() {
               </div>
             </div>}
 
-            {/* Stats - 2 cols on mobile, 4 on desktop */}
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+            {/* Saudi Market Indices - TASI + MT30 + NomuC */}
+            {market && market.indices && <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8, marginBottom: 10 }}>
               {[
-                { l: "إجمالي", v: list.length, c: bl },
-                { l: "مرتفعة", v: adv, c: gn },
-                { l: "منخفضة", v: dec, c: rd },
-                { l: "تاسي", v: market && market.tasi ? Math.round(market.tasi.value || 0) : "-", c: gd },
+                { key: "tasi", label: "تاسي (TASI)", desc: "المؤشر العام" },
+                { key: "mt30", label: "MT30", desc: "أكبر 30 سهم" },
+                { key: "nomuc", label: "نمو (NomuC)", desc: "السوق الموازية" },
+              ].map(function(idx) {
+                var data = market.indices[idx.key];
+                if (!data || !data.value) return <div key={idx.key} style={{ background: cd, borderRadius: 8, border: "1px solid " + bd, padding: 12 }}>
+                  <div style={{ fontSize: 10, color: dm }}>{idx.label}</div>
+                  <div style={{ fontSize: 11, color: dm, marginTop: 4 }}>غير متاح في خطة البيانات الحالية</div>
+                </div>;
+                var ch = data.changePct || 0;
+                return <div key={idx.key} style={{ background: cd, borderRadius: 8, border: "1px solid " + bd, padding: isMobile ? "10px 12px" : "12px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: dm }}>{idx.label}</div>
+                      <div style={{ fontSize: 9, color: dm, marginTop: 1 }}>{idx.desc}</div>
+                    </div>
+                    <div style={{ textAlign: "left" }}>
+                      <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: "#e2e8f0" }}>{(data.value || 0).toLocaleString()}</div>
+                      <div style={{ fontSize: 12, color: ch >= 0 ? gn : rd, fontWeight: 700 }}>{ch >= 0 ? "+" : ""}{ch.toFixed(2)}%</div>
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>}
+
+            {/* Stats - 2 cols on mobile, 4 on desktop */}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "repeat(3, 1fr)", gap: 8, marginBottom: 10 }}>
+              {[
+                { l: "إجمالي الأسهم", v: list.length, c: bl },
+                { l: "مرتفعة اليوم", v: adv, c: gn },
+                { l: "منخفضة اليوم", v: dec, c: rd },
               ].map(function(m, i) {
                 return <div key={i} style={{ background: cd, borderRadius: 8, border: "1px solid " + bd, padding: isMobile ? "8px 10px" : "10px 14px" }}>
                   <div style={{ color: dm, fontSize: 10 }}>{m.l}</div>
